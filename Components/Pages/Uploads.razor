@@ -1,0 +1,84 @@
+﻿@page "/Uploads"
+
+@using System.Security.Claims
+@using MidStore.Components.Shared
+@using MidStore.Data.Models
+
+@inject HttpClient HttpClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Uploads</PageTitle>
+<SearchBar @bind-MediaSearch="UploadedMedia" MediaInitSearch="UploadedMediaInitial"  />
+<MudContainer Style="background-color: #333333">
+    <br />
+    <MudText Typo="Typo.h3" GutterBottom="true">Your media uploads</MudText>
+    <MudDivider />
+    <MudGrid>
+        @foreach (var media in UploadedMedia)
+        {
+            <MudItem >
+                <MudCard Style="background-color: #2c2c2c; border-width: 1px; border-color: #FBB86C">
+                    <MudCardMedia Image="@media.Cover"/>
+                    <MudCardContent>
+                        <MudText>Title: @media.Title</MudText>
+                        <MudText>Description: @media.Description</MudText>
+                        <MudText>Explicit: @media.Explicit</MudText>
+                        <MudText>Private: @media.Private</MudText>
+                        <MudText>Uploaded On: @media.UploadDateTime</MudText>
+                        <MudText>User: @media.UserName</MudText>
+                     </MudCardContent>
+                    <MudCardActions>
+                        <MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined">
+                            <MudButton Href="@media.File" Target="_blank" 
+                                       StartIcon="@Icons.Material.Rounded.PlayArrow">
+                                Open
+                            </MudButton>
+                            <MudButton StartIcon="@Icons.Material.Rounded.Download">
+                                <a href="@media.File" download style="color: inherit">Download</a>
+                            </MudButton>
+                            <MudButton StartIcon="@Icons.Material.Rounded.Visibility"
+                                       OnClick="@(async () => await TogglePrivacy(media))">
+                                 Privacy
+                            </MudButton>
+                        </MudButtonGroup>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+    <br />
+</MudContainer>
+
+@code {
+    public bool Private { get; set; }
+    private List<Media> Media { get; set; } = new List<Media>();
+    [Parameter]
+    public List<Media> UploadedMedia { get; set; } = new List<Media>();
+    [Parameter]
+    public List<Media> UploadedMediaInitial { get; set; } = new List<Media>();
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        if (AuthenticationStateProvider != null)
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (HttpClient != null)
+            {
+                var uploadedmediaContent = await HttpClient.GetFromJsonAsync<List<Media>>("https://localhost:7139/api/Media");
+                Media = uploadedmediaContent ?? new List<Media>();
+                UploadedMedia = Media.Where(m => m.UserId == userId).ToList();
+                UploadedMediaInitial = Media.Where(m => m.UserId == userId).ToList(); ;
+            }
+        }        
+    }
+
+    private async Task TogglePrivacy( Media media )
+    {
+        media.Private = !media.Private;
+        var mediaContent = await HttpClient.PutAsJsonAsync($"https://localhost:7139/api/Media/{media.Id}", media);
+    }    
+}

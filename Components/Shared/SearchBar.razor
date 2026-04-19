@@ -1,0 +1,57 @@
+﻿@using MidStore.Data.Models
+
+<MudAutocomplete T="Media" Placeholder="Search"
+                 AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Primary"
+                 Margin="Margin.Dense" Variant="Variant.Outlined" @bind-Value="mediaItem" SearchFunc="@SearchMedia"
+                 ToStringFunc="@(i => i is null ? null : ItemDisplay(i.Title))" />
+
+@code {
+    private List<Media> _value;
+    [Parameter]
+    public List<Media> MediaSearch
+    {
+        get => _value;
+        set
+        {
+            if (_value == value) return;
+            _value = value;
+            MediaSearchChanged.InvokeAsync(value);
+        }
+    }
+    [Parameter]
+    public List<Media> MediaInitSearch { get; set; } = new List<Media>();
+    [Parameter]
+    public EventCallback<List<Media>> MediaSearchChanged { get; set; }
+
+
+    public Media mediaItem;
+
+    public async Task<IEnumerable<Media>> SearchMedia(string searchText, CancellationToken token)
+    {
+        if (!string.IsNullOrEmpty(searchText))
+        {
+
+            var mediaContent = MediaSearch.Where(p => p.Title.ToLower().Contains(searchText.ToLower()) ||
+                                   p.Description.ToLower().Contains(searchText.ToLower()) ||
+                                   p.UserName.ToLower().Contains(searchText.ToLower())) ?? Enumerable.Empty<Media>();
+
+            MediaSearch = mediaContent.ToList();
+            StateHasChanged();
+            return MediaSearch;
+
+        }
+        MediaSearch = MediaInitSearch;
+        StateHasChanged();
+        return MediaSearch;
+    }
+
+    private string ItemDisplay(string searchText)
+    {
+        Media item = null;
+        if (!string.IsNullOrEmpty(searchText))
+        {
+            item = MediaSearch.FirstOrDefault(i => i.Title == searchText);
+        }
+        return item == null ? "!Not Found!" : $"{item.Title}";
+    }
+}

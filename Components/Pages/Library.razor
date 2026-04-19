@@ -1,0 +1,93 @@
+﻿@page "/Library"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Identity
+@using MidStore.Components.Shared
+@using MidStore.Data.Models
+
+@inject HttpClient HttpClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Library</PageTitle>
+<SearchBar @bind-MediaSearch="Media" MediaInitSearch="MediaInitial" />
+<MudContainer Style="background-color: #333333">
+    <br />
+    <MudText Typo="Typo.h3" GutterBottom="true">Your library</MudText>
+    <MudDivider />
+    <MudGrid>
+        @foreach (var media in Media)
+        {
+            <MudItem>
+                <MudCard Style="background-color: #2c2c2c; border-width: 1px; border-color: #FBB86C">
+                    <MudCardMedia Image="@media.Cover" />
+                    <MudCardContent>
+                        <MudText>Title: @media.Title</MudText>
+                        <MudText>Description: @media.Description</MudText>
+                        <MudText>Explicit: @media.Explicit</MudText>
+                        <MudText>Private: @media.Private</MudText>
+                        <MudText>Uploaded On: @media.UploadDateTime</MudText>
+                        <MudText>User: @media.UserName</MudText>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined">
+                            <MudButton Href="@media.File" Target="_blank"
+                                       StartIcon="@Icons.Material.Rounded.PlayArrow">
+                                Open
+                            </MudButton>
+                            <MudButton StartIcon="@Icons.Material.Rounded.Download">
+                                <a href="@media.File" download style="color: inherit">Download</a>
+                            </MudButton>
+                        </MudButtonGroup>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+    <br />
+</MudContainer>
+
+@code {
+    public bool Private { get; set; }
+    [Parameter]
+    public List<Media> Media { get; set; } = new List<Media>();
+    [Parameter]
+    public List<Media> MediaInitial { get; set; } = new List<Media>();
+    private List<Purchase> Purchase { get; set; } = new List<Purchase>();
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        if (AuthenticationStateProvider != null)
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (HttpClient != null)
+            {
+
+                var purchaseContent = await HttpClient.GetFromJsonAsync<List<Purchase>>($"https://localhost:7139/api/Purchase");
+                if (purchaseContent != null)
+                {
+                    Purchase = purchaseContent.Where(m => m.UserId == userId).ToList();
+                }
+
+                List<Guid> mediaId = Purchase
+                    .Where(x => x.MediaId != null)
+                    .Select(x => x.MediaId!.Value)
+                    .ToList();
+
+                var mediaContent = await HttpClient.GetFromJsonAsync<List<Media>>("https://localhost:7139/api/Media");
+                if (mediaContent != null)
+                {
+                    Media = mediaContent.Where(m => mediaId.Contains(m.Id)).ToList();
+                    MediaInitial = mediaContent.Where(m => mediaId.Contains(m.Id)).ToList();
+                }
+            }
+        }
+    }
+    
+}
+
+
+                

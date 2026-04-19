@@ -1,0 +1,95 @@
+﻿@page "/Account/Manage"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using MidStore.Data.Api
+@using MidStore.Data.Models
+@using MidStore.Data.Controllers
+
+@inject HttpClient HttpClient;
+@inject IdentityUserAccessor UserAccessor
+@inject UserManager<IdentityUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+@inject SignInManager<IdentityUser> SignInManager
+@inject IAvatarUploadService AvatarUploadService;
+
+<PageTitle>Phone number</PageTitle>
+
+<MudContainer Style="background-color: #333333">
+    <br />
+    <MudText Typo="Typo.h3" GutterBottom="true">Manage phone number</MudText>
+    <MudDivider />
+    <StatusMessage />
+     <br />
+    <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+        <DataAnnotationsValidator />
+        <MudGrid>
+            <MudItem md="12">
+                <label>Username</label>
+                <MudStaticTextField Value="@username" Disabled="true"
+                                    Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem md="12">
+                <label>Phone Number</label>
+                <MudStaticTextField For="@(() => Input.PhoneNumber)" @bind-Value="Input.PhoneNumber"
+                                    UserAttributes="@(new() { { "autocomplete", "tel-national" } } )"
+                                    Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem md="12">
+                <MudFab Color="Color.Primary" Label="Save" ButtonType="ButtonType.Submit" />
+            </MudItem>
+        </MudGrid>
+    </EditForm>
+    <br />
+</MudContainer>
+
+@code {
+
+    private string? username;
+    private string? phoneNumber;
+    private Profile Profile = new();
+    private IdentityUser user = default!;
+    private IBrowserFile? TempAvatar { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        username = await UserManager.GetUserNameAsync(user);
+        phoneNumber = await UserManager.GetPhoneNumberAsync(user);
+        Input.PhoneNumber ??= phoneNumber;
+    }
+
+    private Task UpdateAvatar(IBrowserFile file)
+    {
+        TempAvatar = file;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (Input.PhoneNumber != phoneNumber)
+        {
+            var setPhoneResult = await UserManager.SetPhoneNumberAsync(user, Input.PhoneNumber);
+            if (!setPhoneResult.Succeeded)
+            {
+                RedirectManager.RedirectToCurrentPageWithStatus("Error: Failed to set phone number.", HttpContext);
+            }
+        }
+
+        await SignInManager.RefreshSignInAsync(user);
+        RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
+    }
+
+    private sealed class InputModel
+    {
+        [Phone]
+        [Display(Name = "Phone number")]
+        public string? PhoneNumber { get; set; }
+    }
+}

@@ -1,0 +1,88 @@
+﻿@page "/Account/LoginWith2fa"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using MidStore.Data
+
+@inject SignInManager<IdentityUser> SignInManager
+@inject UserManager<IdentityUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Two-factor authentication</PageTitle>
+
+<MudContainer Style="background-color: #333333">
+    <br />
+    <h1>Two-factor authentication</h1>
+    <MudDivider />
+    <StatusMessage Message="@message" />
+    <br />
+    <p>Your login is protected with an authenticator app. Enter your authenticator code below.</p>
+            <EditForm Model="Input" FormName="login-with-2fa" OnValidSubmit="OnValidSubmitAsync" method="post">
+                <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+                <input type="hidden" name="RememberMe" value="@RememberMe" />
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger" role="alert" />
+                <br />
+                <MudItem>
+                    <label>Authenticator code</label>
+                    <MudStaticTextField For="@(() => Input.TwoFactorCode)" @bind-Value="Input.TwoFactorCode"
+                                        Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <ValidationMessage For="() => Input.TwoFactorCode" class="text-danger" />
+                </MudItem>
+                <br />
+                <MudFab Color="Color.Primary" Label="Sign in" ButtonType="ButtonType.Submit" />
+            </EditForm>
+            <br />
+    <MudLink Href="Account/LoginWithRecoveryCode?ReturnUrl">Don't have access to your authenticator device?</MudLink>
+    <br />
+    <br />
+</MudContainer>
+
+@code {
+    private string? message;
+    private IdentityUser user = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    private bool RememberMe { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = await SignInManager.GetTwoFactorAuthenticationUserAsync() ??
+            throw new InvalidOperationException("Unable to load two-factor authentication user.");
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        var authenticatorCode = Input.TwoFactorCode!.Replace(" ", string.Empty).Replace("-", string.Empty);
+        var result = await SignInManager.TwoFactorAuthenticatorSignInAsync(authenticatorCode, true, true);
+        var userId = await UserManager.GetUserIdAsync(user);
+
+        if (result.Succeeded)
+        {
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            message = "Error: Invalid authenticator code.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [StringLength(7, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [DataType(DataType.Text)]
+        [Display(Name = "Authenticator code")]
+        public string? TwoFactorCode { get; set; }
+    }
+}

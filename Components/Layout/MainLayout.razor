@@ -1,0 +1,145 @@
+﻿@using System.Security.Claims
+@using MidStore.Data.Models;
+
+@implements IDisposable
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
+<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="MyCustomTheme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider /> 
+
+<MudLayout>
+    <MudAppBar Style="border-bottom-width: 1px; border-bottom-color: #FBB86C">
+        <a href="/">
+            <MudImage Src="icons/logo.ico" Height="145" Class="rounded-lg"/>
+        </a>
+        <MudSpacer />
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudMenu PositionAtCursor="true">
+                    <ActivatorContent>
+                        <MudAvatar>
+                            @if (Profile?.Avatar != null)
+                            {
+                                <MudImage Src="@Profile.Avatar" Height="45" Class="rounded-lg" />
+                            }
+                            else
+                            {
+                                <MudImage Src="icons/usr.ico" Height="45" Class="rounded-lg" />
+
+                            }
+                        </MudAvatar>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem Href="Account/Manage" Icon="@Icons.Material.Rounded.Settings" IconColor="Color.Primary">Account Settings</MudMenuItem>
+                        <MudMenuItem Href="Account/Logout" Icon="@Icons.Material.Rounded.Logout" IconColor="Color.Secondary">Sign Out</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudMenu PositionAtCursor="true">
+                    <ActivatorContent>
+                        <MudAvatar>
+                            <MudImage Src="icons/usr.ico" Class="rounded-lg" />
+                        </MudAvatar>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem Href="Account/Login" Icon="@Icons.Material.Rounded.Login" IconColor="Color.Primary">Sign In</MudMenuItem>
+                        <MudMenuItem Href="Account/Register" Icon="@Icons.Material.Rounded.PersonAdd" IconColor="Color.Secondary">Sign Up</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+    <MudDrawer ClipMode="DrawerClipMode.Always" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" Style="border-right-width: 1px; border-right-color: #FBB86C">
+        <MudNavMenu>
+            <AuthorizeView>
+                <Authorized>
+                    <br />
+                    <MudNavLink Href="Library" Icon="@Icons.Material.Rounded.Home">Library</MudNavLink>
+                    <MudNavLink Href="Uploads" Icon="@Icons.Material.Rounded.Store">My Uploads</MudNavLink>
+                    <MudNavLink Href="UploadMedia" Icon="@Icons.Material.Rounded.Create">New Upload</MudNavLink>
+                    <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br /> <br />
+                    <MudNavLink Href="CustomizeProfile" Icon="@Icons.Material.Rounded.Build">Customize Profile</MudNavLink>
+                </Authorized>
+                <NotAuthorized>
+
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudNavMenu>
+    </MudDrawer>
+    <MudMainContent Class="mt-16 pa-4">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+
+    [Inject]
+    private HttpClient? HttpClient { get; set; }
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; } = default!;
+
+    [Inject]
+    private AuthenticationStateProvider? AuthenticationStateProvider { get; set; }
+    
+    private bool _isDarkMode = true;
+    private Profile? Profile = new();
+
+    MudTheme MyCustomTheme = new MudTheme()
+    {
+        PaletteDark = new PaletteDark()
+        {
+            AppbarBackground = "#333333",
+            AppbarText = Colors.Gray.Lighten5,
+            Background = "#000000",
+            DrawerBackground = "#333333",
+            DrawerIcon = Colors.Cyan.Default,
+            DrawerText = Colors.Gray.Lighten5,
+            Primary = Colors.Cyan.Default,
+            Secondary = "#FBB86C",
+            TextPrimary = Colors.Gray.Lighten5
+        },
+    };
+
+    private string? currentUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+
+        if (AuthenticationStateProvider != null)
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userId = (user.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            if (HttpClient != null && userId != null)
+            {
+                var profileContent = await HttpClient.GetFromJsonAsync<List<Profile>>("https://localhost:7139/api/Profile");
+                Profile = profileContent?.FirstOrDefault(p => p.UserId == userId) ?? new Profile();
+            }
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

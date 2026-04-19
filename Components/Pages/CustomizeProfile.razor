@@ -1,0 +1,93 @@
+﻿@page "/CustomizeProfile"
+
+@using System.Text
+@using System.Text.Json
+@using System.Security.Claims
+@using MidStore.Data.Api
+@using MidStore.Data.Models
+@using MidStore.Data.Controllers
+
+@inject HttpClient HttpClient
+@inject IAvatarUploadService AvatarUploadService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Customize Profile</PageTitle>
+
+<MudContainer Style="background-color: #333333">
+    <br />
+    <MudText Typo="Typo.h3" GutterBottom="true">Customize your profile</MudText>
+    <MudDivider />
+    <br/>
+    <EditForm Model="Profile" OnValidSubmit="Submit">
+        <DataAnnotationsValidator />
+        <MudItem>
+            @if (Profile.Avatar != null)
+            {
+                <MudImage Src="@Profile.Avatar" Class="rounded-lg" />
+            }
+            else
+            {
+                <MudImage Src="icons/usr.ico" Class="rounded-lg" />
+            }
+        </MudItem>
+        <br />
+        <MudItem>
+            <MudFileUpload T="IBrowserFile" FilesChanged="UpdateAvatar">
+                <ActivatorContent>
+                    <MudStaticButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Rounded.Image" Color="Color.Secondary">
+                        Update Avatar
+                    </MudStaticButton>
+                </ActivatorContent>
+            </MudFileUpload>
+        </MudItem>
+        <br />
+
+        <MudSwitch @bind-Value="Profile.Private" Color="Color.Secondary" UncheckedColor="Color.Primary">Make Account private</MudSwitch>
+        <br />
+        <MudFab Color="Color.Primary" Label="Save" ButtonType="ButtonType.Submit" />
+    </EditForm>
+    <br />
+</MudContainer>
+@code {
+    private string? UserId;
+    private Profile Profile = new()
+    {
+        Private = false,
+        BirthDate = DateTime.Today
+    };
+    private IBrowserFile? TempAvatar { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateProvider != null)
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            UserId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (HttpClient != null && user != null)
+            {
+                var profileContent = await HttpClient.GetFromJsonAsync<List<Profile>>("https://localhost:7139/api/Profile");
+                Profile = profileContent?.FirstOrDefault(p => p.UserId == UserId) ?? new Profile();
+            }
+        }
+    }
+
+    private Task UpdateAvatar(IBrowserFile file)
+    {
+        TempAvatar = file;
+        return Task.CompletedTask;
+    }
+
+    private async Task Submit()
+    {
+        if (TempAvatar != null)
+        {
+            Profile.Avatar = await AvatarUploadService.UploadAvatar(TempAvatar);
+        }
+
+        if (HttpClient != null)
+        {   
+            var profileContent = await HttpClient.PutAsJsonAsync($"https://localhost:7139/api/Profile/{Profile?.Id}", Profile);
+        }
+    }
+}

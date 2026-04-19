@@ -1,0 +1,179 @@
+﻿@page "/UploadMedia"
+
+@using System.Text
+@using System.Text.Json
+@using System.Security.Claims
+@using MidStore.Data.Models
+@using MidStore.Data.Api
+@using MidStore.Data.Controllers
+
+@inject HttpClient HttpClient
+@inject ICoverUploadService CoverUploadService
+@inject IFileUploadService FileUploadService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Upload media</PageTitle>
+
+<MudContainer Style="background-color: #333333">
+    <br />
+    <MudText Typo="Typo.h3" GutterBottom="true">Upload new media</MudText>
+    <MudDivider />
+    <br />
+    <EditForm Model="Media" OnValidSubmit="Submit">
+        <DataAnnotationsValidator />
+        <MudItem>
+            <label>Industry</label>
+            <MudSelect @bind-Value="IndustryId" @bind-Value:after="@LoadGenre" Variant="Variant.Outlined" Margin="Margin.Dense" Style="background-color: #333333">
+                <MudSelectItem T="Guid" Style="background-color: #333333" />
+                @foreach (var industry in Industry ?? new List<Industry>())
+                {
+                    <MudSelectItem Value="@industry.Id">@industry.Label</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <br />
+        <MudItem>
+            <label>Genre</label>
+            <MudSelect @bind-Value="GenreId" Variant="Variant.Outlined" Margin="Margin.Dense" Style="background-color: #333333">
+                <MudSelectItem T="Guid" Style="background-color: #333333" />
+                @foreach (var genre in Genre ?? new List<Genre>())
+                {
+                    <MudSelectItem Value="@genre.Id">@genre.Tag</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <br />
+        <MudItem>
+            <label>Title</label>
+            <MudTextField @bind-Value="Media.Title" Variant="Variant.Outlined" Margin="Margin.Dense" Required />
+            <ValidationMessage For="() => Media.Title" class="text-danger" />
+        </MudItem>
+        <br />
+        <MudItem>
+            <label>Description</label>
+            <MudTextField @bind-Value="Media.Description" Variant="Variant.Outlined" Margin="Margin.Dense" Required />
+            <ValidationMessage For="() => Media.Description" class="text-danger" />
+        </MudItem>
+        <br />
+        <MudSwitch @bind-Value="Media.Explicit" Color="Color.Secondary" UncheckedColor="Color.Primary">Explicit Content</MudSwitch>
+        <br />
+        <MudButtonGroup Color="Color.Secondary" Variant="Variant.Outlined">
+            <MudFileUpload T="IBrowserFile" FilesChanged="HandleCoverChanged">
+                <ActivatorContent>
+                    <MudButton StartIcon="@Icons.Material.Rounded.Image">
+                        Cover Art
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+            <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileChanged">
+                <ActivatorContent>
+                    <MudButton StartIcon="@Icons.Material.Rounded.AttachFile">
+                        Media File
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+        </MudButtonGroup>
+        <br />
+        <br />
+        <MudFab Color="Color.Primary" Label="Submit" ButtonType="ButtonType.Submit" />
+    </EditForm>
+    <br />
+</MudContainer>
+
+@code{
+    private string? UserId;
+    private string? UserName;
+    private Profile? Profile = new();
+    private List<Industry> Industry { get; set; } = [];
+    private Guid IndustryId { get; set; }
+    private List<Genre> Genre { get; set; } = [];
+    private Guid GenreId { get; set; }
+    private Media Media = new()
+    {
+        Explicit = false,
+    };
+    private MediaGenre MediaGenre = new();
+    private IBrowserFile? TempCover { get; set; }
+    private IBrowserFile? TempFile{ get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateProvider != null)
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            UserId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            UserName = user.Identity.Name;
+            if (HttpClient != null && user != null)
+            {
+                var profileContent = await HttpClient.GetFromJsonAsync<List<Profile>>("https://localhost:7139/api/Profile");
+                Profile = profileContent?.FirstOrDefault(p => p.UserId == UserId) ?? new Profile();
+            }
+        }
+
+        if (HttpClient != null)
+        {
+            var industryContent = await HttpClient.GetFromJsonAsync<List<Industry>>("https://localhost:7139/api/Industry");
+            Industry = (industryContent ?? new List<Industry>()).OrderBy(i => i.Label).ToList();
+        }
+    }
+
+    private async Task LoadGenre()
+    {
+        if (HttpClient != null)
+        {
+            var genreContent = await HttpClient.GetFromJsonAsync<List<Genre>>("https://localhost:7139/api/Genre");
+            Genre = (genreContent ?? new List<Genre>()).Where(g => g.IndustryId == IndustryId).OrderBy(g => g.Tag).ToList();
+        }
+    }
+
+    private  Task HandleCoverChanged(IBrowserFile file)
+    {
+        TempCover = file;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleFileChanged(IBrowserFile file)
+    {
+        TempFile = file;
+        return Task.CompletedTask;
+    }
+
+    private async Task Submit()
+    {
+        if (HttpClient != null)
+        {
+            if (TempCover != null)
+            {
+                Media.Cover = await CoverUploadService.UploadCover(TempCover);
+            }
+
+            if (TempFile != null)
+            {
+                Media.File = await FileUploadService.UploadFile(TempFile);
+            }
+
+            Media.UserId = UserId;
+            Media.UploadDateTime = DateTime.Now;
+            Media.Private = Profile?.Private ?? false;
+            Media.UserName = UserName;
+            var mediaContent = new StringContent(JsonSerializer.Serialize(Media), Encoding.UTF8, "application/json");
+            var mediaResponse = await HttpClient.PostAsync("https://localhost:7139/api/Media", mediaContent);
+            var MediaId = await mediaResponse.Content.ReadFromJsonAsync<Guid>();
+
+            MediaGenre.GenreId = GenreId;
+            MediaGenre.MediaId = MediaId;
+            var mediagenreContent = new StringContent(JsonSerializer.Serialize(MediaGenre), Encoding.UTF8, "application/json");
+            var mediagenreResponse = await HttpClient.PostAsync("https://localhost:7139/api/MediaGenre", mediagenreContent);
+
+            Media = new Media()
+            {
+                Explicit = false,
+            };
+            MediaGenre = new MediaGenre();
+            IndustryId = Guid.Empty;
+            GenreId = Guid.Empty;
+        }
+    }
+}
